@@ -92,6 +92,9 @@ jobs:
             -G Ninja \
             -S . \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DBUILD_WERROR=OFF \
+            -DBUILD_DOXYGEN=OFF \
+            -DBUILD_TESTS=OFF \
             -DSUNSHINE_ASSETS_DIR=assets \
             -DSUNSHINE_PUBLISHER_NAME="${GITHUB_REPOSITORY_OWNER}" \
             -DSUNSHINE_PUBLISHER_WEBSITE="https://github.com/${GITHUB_REPOSITORY_OWNER}/Sunshine" \
