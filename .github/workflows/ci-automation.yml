@@ -104,6 +104,27 @@ jobs:
             -DSUNSHINE_PUBLISHER_ISSUE_URL="https://github.com/${GITHUB_REPOSITORY_OWNER}/Sunshine/issues"
           ninja -C build
 
+      - name: Check Windows linkage
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          binaries=(
+            build/sunshine.exe
+            build/tools/audio-info.exe
+            build/tools/dxgi-info.exe
+            build/tools/sunshinesvc.exe
+            build/tests/test_sunshine.exe
+          )
+          unexpected_deps=""
+          for binary in "${binaries[@]}"; do
+            ldd "${binary}"
+          done
+
+      - name: Run tests
+        shell: msys2 {0}
+        working-directory: build/tests
+        run: ./test_sunshine.exe --gtest_color=yes
+
       - name: Package ZIP and Installer
         shell: msys2 {0}
         run: |
