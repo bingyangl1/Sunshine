@@ -8,13 +8,115 @@ on:
       - feat/automation
   workflow_dispatch:
 
+env:
+  PYTHON_VERSION: '3.14'
+
 jobs:
-  call-windows-build:
+  build_windows:
+    name: Windows-AMD64
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: msys2 {0}
     permissions:
       contents: read
-      actions: read
-    uses: ./.github/workflows/ci-windows.yml
-    with:
-      publish_release: 'false'
-      release_commit: ${{ github.sha }}
-      release_version: automation-dev
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Dependencies Windows
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: ucrt64
+          update: true
+          install: >-
+            wget
+
+      - name: Update Windows dependencies
+        shell: msys2 {0}
+        run: |
+          dependencies=(
+            "git"
+            "mingw-w64-ucrt-x86_64-boost"
+            "mingw-w64-ucrt-x86_64-cmake"
+            "mingw-w64-ucrt-x86_64-cppwinrt"
+            "mingw-w64-ucrt-x86_64-curl-winssl"
+            "mingw-w64-ucrt-x86_64-doxygen"
+            "mingw-w64-ucrt-x86_64-gcc"
+            "mingw-w64-ucrt-x86_64-graphviz"
+            "mingw-w64-ucrt-x86_64-miniupnpc"
+            "mingw-w64-ucrt-x86_64-nlohmann-json"
+            "mingw-w64-ucrt-x86_64-onevpl"
+            "mingw-w64-ucrt-x86_64-openssl"
+            "mingw-w64-ucrt-x86_64-opus"
+            "mingw-w64-ucrt-x86_64-toolchain"
+            "mingw-w64-ucrt-x86_64-qt6-static"
+            "mingw-w64-ucrt-x86_64-MinHook"
+            "mingw-w64-ucrt-x86_64-nsis"
+            "ninja"
+          )
+          pacman -Syu --noconfirm "${dependencies[@]}"
+
+      - name: Setup NodeJS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Setup python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+
+      - name: Sync Python tools
+        shell: msys2 {0}
+        env:
+          MSYS2_PATH_TYPE: inherit
+          UV_PYTHON: ${{ steps.setup-python.outputs.python-path }}
+        run: |
+          uv sync --locked --no-python-downloads --no-install-project
+
+      - name: Build Windows
+        shell: msys2 {0}
+        env:
+          BRANCH: ${{ github.ref_name }}
+          BUILD_VERSION: automation-dev
+          COMMIT: ${{ github.sha }}
+        run: |
+          NODEJS_PATH=$(cygpath "$(dirname $(which node))")
+          export PATH="$PATH:$NODEJS_PATH"
+
+          mkdir -p build
+          cmake \
+            -B build \
+            -G Ninja \
+            -S . \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DSUNSHINE_ASSETS_DIR=assets \
+            -DSUNSHINE_PUBLISHER_NAME="${GITHUB_REPOSITORY_OWNER}" \
+            -DSUNSHINE_PUBLISHER_WEBSITE="https://github.com/${GITHUB_REPOSITORY_OWNER}/Sunshine" \
+            -DSUNSHINE_PUBLISHER_ISSUE_URL="https://github.com/${GITHUB_REPOSITORY_OWNER}/Sunshine/issues"
+          ninja -C build
+
+      - name: Package ZIP and Installer
+        shell: msys2 {0}
+        run: |
+          mkdir -p artifacts
+          cd build
+          cpack -G ZIP
+          cpack -G NSIS
+          mv ./cpack_artifacts/Sunshine.zip ../artifacts/Sunshine-automation-windows-x64-portable.zip
+          mv ./cpack_artifacts/Sunshine.exe ../artifacts/Sunshine-automation-windows-x64-installer.exe
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sunshine-Automation-Windows-x64
+          path: artifacts/
+          retention-days: 30
