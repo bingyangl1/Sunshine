@@ -98,6 +98,9 @@ jobs:
             -G Ninja \
             -S . \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCUDA_FAIL_ON_MISSING=OFF \
+            -DSUNSHINE_ENABLE_TRAY=OFF \
+            -DBUILD_DOCS=OFF \
             -DSUNSHINE_ASSETS_DIR=assets \
             -DSUNSHINE_PUBLISHER_NAME="${GITHUB_REPOSITORY_OWNER}" \
             -DSUNSHINE_PUBLISHER_WEBSITE="https://github.com/${GITHUB_REPOSITORY_OWNER}/Sunshine" \
@@ -117,8 +120,24 @@ jobs:
           )
           unexpected_deps=""
           for binary in "${binaries[@]}"; do
-            ldd "${binary}"
+            linkage=$(ldd "${binary}")
+            unexpected=$(awk '
+              BEGIN { IGNORECASE = 1 }
+              $1 == "zlib1.dll" { next }
+              $1 ~ /^minhook-detours\..*\.dll$/ { next }
+              $1 ~ /^api-ms-win-/ { next }
+              $1 ~ /^ext-ms-win-/ { next }
+              $0 ~ /=>[[:space:]]+not found/ { print }
+            ' <<< "${linkage}")
+            if [[ -n "${unexpected}" ]]; then
+              unexpected_deps="${unexpected_deps}"$'\n'"${binary}:"$'\n'"${unexpected}"
+            fi
           done
+          if [[ -n "${unexpected_deps}" ]]; then
+            echo "Missing dependencies:"
+            echo "${unexpected_deps}"
+            exit 1
+          fi
 
       - name: Run tests
         shell: msys2 {0}
