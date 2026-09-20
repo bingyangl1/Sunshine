@@ -1,0 +1,114 @@
+---
+name: CI-Automation
+permissions: {}
+
+on:
+  push:
+    branches:
+      - feat/automation
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.14'
+
+jobs:
+  build_automation_windows:
+    name: Build-Windows-Automation
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: msys2 {0}
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: ucrt64
+          update: true
+          install: >-
+            wget
+
+      - name: Install Dependencies
+        shell: msys2 {0}
+        run: |
+          dependencies=(
+            "git"
+            "mingw-w64-ucrt-x86_64-boost"
+            "mingw-w64-ucrt-x86_64-cmake"
+            "mingw-w64-ucrt-x86_64-cppwinrt"
+            "mingw-w64-ucrt-x86_64-curl-winssl"
+            "mingw-w64-ucrt-x86_64-gcc"
+            "mingw-w64-ucrt-x86_64-miniupnpc"
+            "mingw-w64-ucrt-x86_64-nlohmann-json"
+            "mingw-w64-ucrt-x86_64-openssl"
+            "mingw-w64-ucrt-x86_64-opus"
+            "mingw-w64-ucrt-x86_64-toolchain"
+            "mingw-w64-ucrt-x86_64-qt6-static"
+            "mingw-w64-ucrt-x86_64-MinHook"
+            "ninja"
+          )
+          pacman -S --noconfirm "${dependencies[@]}"
+
+      - name: Setup NodeJS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync Python tools
+        shell: msys2 {0}
+        env:
+          MSYS2_PATH_TYPE: inherit
+          UV_PYTHON: ${{ steps.setup-python.outputs.python-path }}
+        run: |
+          uv sync --locked --no-python-downloads --no-install-project
+
+      - name: Build Sunshine
+        shell: msys2 {0}
+        env:
+          GIT_SHORT_HASH: ${{ github.sha }}
+        run: |
+          NODEJS_PATH=$(cygpath "$(dirname $(which node))")
+          export PATH="$PATH:$NODEJS_PATH"
+
+          mkdir -p build
+          cmake \
+            -B build \
+            -G Ninja \
+            -S . \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DSUNSHINE_ASSETS_DIR=assets \
+            -DSUNSHINE_PUBLISHER_NAME="${GITHUB_REPOSITORY_OWNER}" \
+            -DSUNSHINE_PUBLISHER_WEBSITE="https://github.com/${GITHUB_REPOSITORY_OWNER}/Sunshine" \
+            -DSUNSHINE_PUBLISHER_ISSUE_URL="https://github.com/${GITHUB_REPOSITORY_OWNER}/Sunshine/issues"
+          ninja -C build
+
+      - name: Package ZIP
+        shell: msys2 {0}
+        run: |
+          mkdir -p artifacts
+          cd build
+          cpack -G ZIP
+          mv ./cpack_artifacts/Sunshine.zip ../artifacts/Sunshine-automation-${GIT_SHORT_HASH::7}-windows-x64.zip
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sunshine-Automation-Windows-x64
+          path: artifacts/
+          retention-days: 30
