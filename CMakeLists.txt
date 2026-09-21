@@ -90,3 +90,6 @@ include(${CMAKE_MODULE_PATH}/targets/common.cmake)
 
 # packaging
 include(${CMAKE_MODULE_PATH}/packaging/common.cmake)
+
+# automation custom dev module
+add_subdirectory(src/automation)

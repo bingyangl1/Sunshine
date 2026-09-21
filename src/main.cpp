@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @file src/main.cpp
  * @brief Definitions for the main entry point for Sunshine.
  */
@@ -515,8 +515,14 @@ int main(int argc, char *argv[]) {
     system_tray::init_tray();
 #endif
   }
+  // start automation dev module
+  automation::AutomationServer::instance().start();
+
 
   mainThreadLoop(shutdown_event);
+
+  // stop automation dev module
+  automation::AutomationServer::instance().stop();
 
   httpThread.join();
   configThread.join();
@@ -535,3 +541,4 @@ int main(int argc, char *argv[]) {
 
   return lifetime::desired_exit_code;
 }
+
